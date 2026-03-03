@@ -3,8 +3,8 @@ chrome.storage.local.get(['active'], async (res) => {
 
   // Indicador visual en pantalla
   const indicador = document.createElement('div');
-  indicador.innerHTML = '🤖 Script: ACTIVADO';
-  indicador.style = 'position:fixed; top:20px; left:20px; background:black; color:#0f0; padding:15px; z-index:100000; border:2px solid #0f0; font-family:sans-serif; font-weight:bold; border-radius:8px;';
+  indicador.innerHTML = 'Script: ACTIVADO';
+  indicador.style = 'position:fixed; top:20px; left:20px; background:white; color:#1c1c1c; padding:15px; z-index:100000; border:2px solid #FFE600; font-family:sans-serif; font-weight:bold; border-radius:8px;';
   document.body.appendChild(indicador);
 
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -34,7 +34,7 @@ chrome.storage.local.get(['active'], async (res) => {
     // No enviamos "finish" porque el script volverá a correr en la siguiente página
   } else {
     // Si no hay más botones Y no hay más páginas, o terminamos la última página
-    indicador.innerHTML = '🏁 Fin de la lista. Desactivando...';
+    indicador.innerHTML = 'Fin de la lista. Desactivando...';
     await delay(1500);
     chrome.runtime.sendMessage({ action: "finish" });
   }
