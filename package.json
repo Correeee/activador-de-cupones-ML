@@ -1,0 +1,14 @@
+{
+    "name": "activador-cupones-mercadolibre",
+    "version": "1.4.0",
+    "description": "Extensión de Chrome que aplica cupones de Mercado Libre automáticamente.",
+    "private": true,
+    "scripts": {
+        "test": "jest",
+        "test:watch": "jest --watch"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0",
+        "jest-environment-jsdom": "^29.7.0"
+    }
+}
