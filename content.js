@@ -1,10 +1,10 @@
 // content.js — Script que corre en la página de cupones de Mercado Libre
 //
-// IMPORTANTE: En la página de cupones de ML, los cupones se activan
-// automáticamente al cargar la página. El único botón dentro de cada tarjeta
-// es "Buscar", que NAVEGA a la lista de productos (no activa nada).
-// Por eso este script NO clickea botones: solo recorre las páginas, extrae
-// los datos de los cupones activados (badge verde) y acumula el total.
+// La URL destino filtra cupones INACTIVOS (status=inactive).
+// Cada tarjeta tiene un botón "Aplicar" que hay que presionar para activar el cupón.
+// Este script los presiona uno por uno con delays aleatorios para imitar
+// el comportamiento humano y evitar detección como bot.
+// Luego navega automáticamente a la siguiente página hasta terminar.
 
 const CUPONES_URL = "https://www.mercadolibre.com.ar/cupones/filter?status=inactive&source_page=int_applied_filters&all=true";
 
@@ -40,15 +40,21 @@ function extraerDatosCupon(card) {
   const fecha = new Date().toISOString();
   if (!card) return { titulo: '', descuento: '', comercio: '', fecha };
 
-  const tituloEl = card.querySelector('.title');
-  const titulo = (tituloEl?.innerText || tituloEl?.textContent || '').trim();
+  const tituloEl = card.querySelector('.title, [class*="title"], h2, h3, h4');
+  let titulo = (tituloEl?.innerText || tituloEl?.textContent || '').trim();
 
-  // El descuento suele ser el texto del título (ej. "40% OFF")
+  // Si no se encontró título con selectores estándar, buscar patrones de descuento en la tarjeta
+  if (!titulo) {
+    const textoCard = (card.innerText || card.textContent || '').trim();
+    const matchDesc = textoCard.match(/(\d+%\s*OFF|\$\s*[\d.,]+\s*OFF)/i);
+    titulo = matchDesc ? matchDesc[1].trim() : 'Cupón';
+  }
+
   const descuento = titulo;
 
-  // El comercio aparece en el subtítulo "En productos de X"
+  // El comercio suele aparecer en el subtítulo "En productos de X" o elementos descriptivos
   let comercio = '';
-  const subtitulos = Array.from(card.querySelectorAll('.subtitle'));
+  const subtitulos = Array.from(card.querySelectorAll('.subtitle, [class*="subtitle"], p, span'));
   for (const sub of subtitulos) {
     const texto = (sub.innerText || sub.textContent || '').trim();
     const match = texto.match(/En productos de\s+(.+)/i);
@@ -210,6 +216,110 @@ function waitFor(condicion, opts = {}) {
   });
 }
 
+/**
+ * Genera una clave identificadora única para un cupón a partir de su título y comercio.
+ * @param {{ titulo?: string, comercio?: string, descuento?: string }} cupon
+ * @returns {string}
+ */
+function claveCupon(cupon) {
+  if (!cupon) return '';
+  const titulo = (cupon.titulo || cupon.descuento || '').trim().toLowerCase();
+  const comercio = (cupon.comercio || '').trim().toLowerCase();
+  return `${titulo}__${comercio}`;
+}
+
+/**
+ * Combina un historial previo con nuevos cupones sin duplicar entradas.
+ * @param {Array<object>} previo
+ * @param {Array<object>} nuevos
+ * @returns {Array<object>}
+ */
+function mergeHistorial(previo = [], nuevos = []) {
+  const listaPrevia = Array.isArray(previo) ? previo : [];
+  const listaNuevos = Array.isArray(nuevos) ? nuevos : [];
+  const vistos = new Set();
+  const resultado = [];
+
+  for (const c of listaPrevia) {
+    const key = claveCupon(c);
+    if (key && !vistos.has(key)) {
+      vistos.add(key);
+      resultado.push(c);
+    }
+  }
+
+  for (const c of listaNuevos) {
+    const key = claveCupon(c);
+    if (key && !vistos.has(key)) {
+      vistos.add(key);
+      resultado.push(c);
+    }
+  }
+
+  return resultado;
+}
+
+/**
+ * Crea un indicador visual flotante aislado mediante Shadow DOM
+ * para evitar colisiones con el CSS de Mercado Libre.
+ * @param {Document} rootDoc
+ * @returns {{ setText: (t: string) => void, remover: () => void, el: HTMLElement }}
+ */
+function crearIndicadorFlotante(rootDoc = document) {
+  const host = rootDoc.createElement('div');
+  host.id = 'ml-cupones-indicador-host';
+
+  let container;
+  if (host.attachShadow) {
+    const shadow = host.attachShadow({ mode: 'open' });
+    const style = rootDoc.createElement('style');
+    style.textContent = `
+      :host {
+        all: initial;
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 2147483647;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      .badge {
+        background: #ffffff;
+        color: #1c1c1c;
+        padding: 12px 16px;
+        border: 2px solid #FFE600;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        font-size: 14px;
+        font-weight: bold;
+        min-width: 200px;
+        display: inline-block;
+        line-height: 1.4;
+      }
+    `;
+    container = rootDoc.createElement('div');
+    container.className = 'badge';
+    container.textContent = '⏳ Iniciando...';
+    shadow.appendChild(style);
+    shadow.appendChild(container);
+  } else {
+    host.style.cssText = 'position:fixed;top:20px;left:20px;background:white;color:#1c1c1c;padding:12px 16px;z-index:2147483647;border:2px solid #FFE600;font-family:sans-serif;font-weight:bold;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:14px;min-width:200px;';
+    container = host;
+    container.textContent = '⏳ Iniciando...';
+  }
+
+  rootDoc.body.appendChild(host);
+
+  return {
+    setText: (texto) => {
+      container.textContent = texto;
+    },
+    remover: () => {
+      if (host.parentNode) host.parentNode.removeChild(host);
+    },
+    el: host
+  };
+}
+
 // Exponer para tests (JSDOM). En el navegador real no molesta.
 if (typeof window !== 'undefined') {
   window.__ML_CUPONES__ = {
@@ -221,7 +331,10 @@ if (typeof window !== 'undefined') {
     obtenerSiguientePagina,
     calcularAcumulado,
     esPaginaDeLogin,
-    waitFor
+    waitFor,
+    claveCupon,
+    mergeHistorial,
+    crearIndicadorFlotante
   };
 }
 
@@ -230,18 +343,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
   chrome.storage.local.get(['active'], async (res) => {
     if (!res.active) return;
 
-    // Indicador visual flotante en pantalla
-    const indicador = document.createElement('div');
-    indicador.style.cssText = [
-      'position:fixed', 'top:20px', 'left:20px',
-      'background:white', 'color:#1c1c1c', 'padding:12px 16px',
-      'z-index:100000', 'border:2px solid #FFE600',
-      'font-family:sans-serif', 'font-weight:bold',
-      'border-radius:10px', 'box-shadow:0 4px 12px rgba(0,0,0,0.15)',
-      'font-size:14px', 'min-width:200px'
-    ].join(';');
-    indicador.innerText = '⏳ Iniciando...';
-    document.body.appendChild(indicador);
+    // Indicador visual flotante aislado en Shadow DOM
+    const indicador = crearIndicadorFlotante(document);
 
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -283,9 +386,16 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       return !!s.active;
     };
 
+    // Devuelve todos los botones "Aplicar" presentes en la página
+    const obtenerBotonesAplicar = () =>
+      Array.from(document.querySelectorAll('button, a')).filter((el) => {
+        const texto = (el.innerText || el.textContent || '').trim().toLowerCase();
+        return texto === 'aplicar';
+      });
+
     try {
       // 1) Espera reactiva: aguardar a que aparezcan tarjetas o el login
-      indicador.innerText = '⏳ Esperando cupones...';
+      indicador.setText('⏳ Esperando cupones...');
       await waitFor(
         () =>
           contarTarjetas(document) > 0 ||
@@ -295,53 +405,86 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
 
       // 2) Detección de sesión expirada / login
       if (esPaginaDeLogin(document, window.location.href)) {
-        indicador.innerText = '🔒 Sesión expirada. Iniciá sesión en Mercado Libre.';
+        indicador.setText('🔒 Sesión expirada. Iniciá sesión en Mercado Libre.');
         reportarProgreso(0, 0, 'login', 0);
         await delay(2500);
         await desactivar(0, []);
         return;
       }
 
-      // 3) Los cupones se activan solos al cargar la página.
-      //    Extraemos los datos de los que quedaron activados (badge verde).
-      const totalTarjetas = contarTarjetas(document);
-      const cuponesPagina = extraerCuponesActivados(document);
-      const activadosPagina = cuponesPagina.length;
+      // 3) La página filtra cupones INACTIVOS (status=inactive).
+      //    Cada tarjeta tiene un botón "Aplicar" que hay que presionar.
       const totalPaginas = obtenerTotalPaginas(document);
-
-      // Asentamiento: dejamos que la página "respire" antes de leer el DOM,
-      // con un retardo aleatorio para imitar el ritmo humano.
-      await delayHumano(1500, 3000);
 
       const stored = await chrome.storage.local.get(['progress', 'historial']);
       const acumuladoPrevio = stored?.progress?.acumulado ?? 0;
       const historialPrevio = Array.isArray(stored?.historial) ? stored.historial : [];
-      const acumulado = calcularAcumulado(acumuladoPrevio, activadosPagina);
-      const historial = historialPrevio.concat(cuponesPagina);
 
-      if (totalTarjetas > 0) {
-        indicador.innerText = `✅ ${acumulado} cupones activados (pág. ${paginaActual}/${totalPaginas})`;
-        reportarProgreso(activadosPagina, totalTarjetas, 'running', acumulado, {
-          totalPaginas,
-          historial
-        });
+      // Esperar a que aparezcan los botones "Aplicar" (pueden cargarse dinámicamente)
+      await waitFor(() => obtenerBotonesAplicar().length > 0, { timeout: 8000 });
+
+      const botonesAplicar = obtenerBotonesAplicar();
+      const totalBotones = botonesAplicar.length;
+      let activadosEnPagina = 0;
+
+      if (totalBotones === 0) {
+        indicador.setText('ℹ️ Sin cupones para aplicar en esta página');
+        reportarProgreso(0, 0, 'empty', acumuladoPrevio, { totalPaginas });
       } else {
-        indicador.innerText = 'ℹ️ No hay cupones en esta página';
-        reportarProgreso(0, 0, 'empty', acumuladoPrevio, { totalPaginas, historial });
+        indicador.setText(`🖱️ Aplicando ${totalBotones} cupones (pág. ${paginaActual}/${totalPaginas})...`);
+        reportarProgreso(0, totalBotones, 'running', acumuladoPrevio, { totalPaginas });
+
+        // Hacer click en cada botón "Aplicar" con delay humano entre clicks.
+        // Re-obtenemos la lista en cada iteración porque el DOM puede cambiar.
+        for (let i = 0; i < totalBotones; i++) {
+          if (!(await estaActivo())) {
+            indicador.setText('⏹ Detenido por el usuario');
+            return;
+          }
+
+          // Tomar siempre el primer botón "Aplicar" disponible
+          const btns = obtenerBotonesAplicar();
+          if (btns.length === 0) break;
+          const btn = btns[0];
+
+          // Scroll suave para simular lectura humana
+          btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await delayHumano(500, 1000);
+
+          try {
+            btn.click();
+            activadosEnPagina++;
+
+            const acumulado = calcularAcumulado(acumuladoPrevio, activadosEnPagina);
+            indicador.setText(`✅ ${acumulado} aplicados — ${activadosEnPagina}/${totalBotones} en pág. ${paginaActual}`);
+            reportarProgreso(activadosEnPagina, totalBotones, 'running', acumulado, { totalPaginas });
+          } catch (err) {
+            console.warn('[ML Cupones] No se pudo hacer click en botón Aplicar:', err);
+          }
+
+          // Esperar a que ML procese el cupón antes del siguiente click
+          await delayHumano(500, 800);
+        }
       }
 
-      // 4) Interrupción si el usuario detuvo
+      // 4) Extraer cupones activados en esta página para el historial
+      await delayHumano(800, 1500);
+      const cuponesPagina = extraerCuponesActivados(document);
+      const historial = mergeHistorial(historialPrevio, cuponesPagina);
+      const acumuladoFinal = calcularAcumulado(acumuladoPrevio, activadosEnPagina);
+
+      // 5) Interrupción si el usuario detuvo
       if (!(await estaActivo())) {
-        indicador.innerText = '⏹ Detenido por el usuario';
+        indicador.setText('⏹ Detenido por el usuario');
         return;
       }
 
-      // 5) Navegación a la siguiente página
+      // 6) Navegación a la siguiente página
       const { nextBtn, disabled } = obtenerSiguientePagina(document);
 
       if (nextBtn && !disabled) {
-        indicador.innerText = '➡️ Siguiente página...';
-        reportarProgreso(activadosPagina, totalTarjetas, 'navigating', acumulado, {
+        indicador.setText('➡️ Siguiente página...');
+        reportarProgreso(activadosEnPagina, totalBotones || 0, 'navigating', acumuladoFinal, {
           totalPaginas,
           historial
         });
@@ -349,12 +492,12 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         nextBtn.click();
         // No desactivar: el script volverá a correr en la siguiente página
       } else {
-        indicador.innerText = `🎉 ¡Listo! ${acumulado} cupones activados`;
+        indicador.setText(`🎉 ¡Listo! ${acumuladoFinal} cupones aplicados`);
         await delayHumano(2000, 3000);
-        await desactivar(acumulado, historial);
+        await desactivar(acumuladoFinal, historial);
       }
     } catch (e) {
-      indicador.innerText = '⚠️ Error. Desactivando...';
+      indicador.setText('⚠️ Error. Desactivando...');
       reportarProgreso(0, 0, 'error', 0);
       await delay(1500);
       await desactivar(0, []);
@@ -362,3 +505,4 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     }
   });
 }
+

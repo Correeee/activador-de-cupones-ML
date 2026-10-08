@@ -31,16 +31,23 @@
 - [x] Notificación nativa al finalizar (permiso `notifications`).
 - [x] Ampliar la suite de pruebas a 26 tests.
 
-## v1.7.0 — Seguridad y mantenibilidad (próximo)
+## v1.7.0 — Seguridad y robustez técnica (en progreso)
 
-- [ ] Reducir permisos (`activeTab` es redundante con `tabs`).
-- [ ] Definir `run_at: document_idle` en el content script.
+- [x] Reducir permisos (eliminado `tabs` broad en favor de `host_permissions` específicos de Mercado Libre).
+- [x] Definir `run_at: document_idle` en el content script.
+- [x] Corregir codificación de `README.md` a UTF-8 y alinear versiones del proyecto (1.6.0).
+- [x] Aislamiento visual del cartel con Shadow DOM (`crearIndicadorFlotante`) para prevenir colisiones con el CSS de Mercado Libre.
+- [x] Detección y limpieza de pestaña cerrada en background (`chrome.tabs.onRemoved`) evitando estados huérfanos.
+- [x] Deduplicación en el historial de cupones (`mergeHistorial` y `claveCupon`).
+- [x] Click en notificación nativa enfoca automáticamente la pestaña de cupones.
+- [x] Ampliar la suite de pruebas a 31 tests.
 - [ ] Panel de opciones (`options.html`): delay, modo silencioso, rango de páginas.
 - [ ] Tests de integración del flujo completo y de `popup.js`.
 
 ## v2.0.0 — Experiencia de usuario
 
-- [ ] Historial de cupones aplicados por fecha.
-- [ ] Notificaciones nativas al finalizar.
+- [ ] Historial de cupones persistente acumulado con filtros por fecha.
 - [ ] Opción de modo "silencioso" (sin indicador flotante).
-- [ ] Internacionalización (es-AR / es-MX / pt-BR).
+- [ ] Internacionalización y soporte multi-país (es-AR / es-MX / pt-BR / es-CL / es-CO).
+
+*Última actualización: 2026-10-04 (Shadow DOM, limpieza onRemoved, deduplicación en historial y 31 tests pasando)*

@@ -1,13 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Auto Activador de Cupones - Mercado Libre",
-  "version": "1.4",
+  "version": "1.6.0",
   "description": "Aplica cupones de Mercado Libre automáticamente.",
   "permissions": [
     "storage",
     "activeTab",
     "tabs",
     "notifications"
+  ],
+  "host_permissions": [
+    "*://*.mercadolibre.com.ar/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -27,7 +30,8 @@
       ],
       "js": [
         "content.js"
-      ]
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

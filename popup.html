@@ -16,7 +16,8 @@
     body {
       width: 340px;
       background: #f5f5f5;
-      overflow: hidden;
+      overflow-y: auto;
+      max-height: 580px;
     }
 
     /* ── Header ───────────────────────────────────────────────────── */
@@ -189,11 +190,6 @@
     .history-wrap {
       margin-top: 16px;
       text-align: left;
-      display: none;
-    }
-
-    .history-wrap.visible {
-      display: block;
     }
 
     .history-title {
@@ -310,7 +306,9 @@
         <span>Historial de cupones</span>
         <span id="historyCount" class="history-count">0</span>
       </div>
-      <div id="historyList" class="history-list"></div>
+      <div id="historyList" class="history-list">
+        <div class="history-empty">Los cupones detectados aparecerán aquí</div>
+      </div>
     </div>
   </div>
 

@@ -2,6 +2,7 @@
 // Recibe mensajes del content script y los reenvía al popup si está abierto.
 // Si el popup está cerrado, los datos quedan en storage para que el popup los lea al abrirse.
 // Al finalizar, dispara una notificación nativa con el total de cupones activados.
+// Detecta si la pestaña de trabajo se cierra para limpiar el estado huérfano.
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'progress') {
@@ -22,6 +23,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       updates.historial = request.historial;
     }
 
+    // Registrar tabId para monitoreo de cierre de pestaña
+    if (sender?.tab?.id) {
+      updates.targetTabId = sender.tab.id;
+    }
+
     chrome.storage.local.set(updates);
 
     // Intentar reenviar al popup si está abierto (best-effort)
@@ -34,6 +40,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     chrome.storage.local.set({
       active: false,
+      targetTabId: null,
       progress: { status: 'done', applied: total, acumulado: total },
       historial
     });
@@ -43,6 +50,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Notificación nativa al finalizar
     notificarFinalizacion(total);
   }
+});
+
+// Detectar si el usuario cierra la pestaña objetivo mientras la extensión está activa
+chrome.tabs.onRemoved.addListener((closedTabId) => {
+  chrome.storage.local.get(['active', 'targetTabId'], (res) => {
+    if (res.active && res.targetTabId === closedTabId) {
+      console.warn('[ML Cupones] La pestaña del activador fue cerrada. Deteniendo ejecución.');
+      chrome.storage.local.set({
+        active: false,
+        targetTabId: null,
+        progress: { status: 'error', applied: 0, acumulado: 0 }
+      });
+      chrome.runtime.sendMessage({
+        action: 'finish',
+        totalApplied: 0,
+        cancelled: true,
+        reason: 'tab_closed'
+      }).catch(() => { });
+    }
+  });
 });
 
 /**
@@ -74,3 +101,21 @@ function notificarFinalizacion(total) {
     }
   );
 }
+
+// Al hacer clic en la notificación nativa, enfocar la pestaña de Mercado Libre
+if (chrome.notifications && chrome.notifications.onClicked) {
+  chrome.notifications.onClicked.addListener((notificationId) => {
+    if (notificationId && notificationId.startsWith('ml-cupones-')) {
+      chrome.tabs.query({ url: "*://*.mercadolibre.com.ar/*" }, (tabs) => {
+        const mlTab = tabs.find((t) => t.url && t.url.includes('mercadolibre.com.ar/cupones')) || tabs[0];
+        if (mlTab?.id) {
+          chrome.tabs.update(mlTab.id, { active: true });
+          if (mlTab.windowId && chrome.windows?.update) {
+            chrome.windows.update(mlTab.windowId, { focused: true });
+          }
+        }
+      });
+    }
+  });
+}
+

@@ -50,6 +50,8 @@ btn.addEventListener('click', () => {
     if (nuevoEstado) {
       updates.progress = null;
       updates.historial = [];
+    } else {
+      updates.targetTabId = null;
     }
 
     chrome.storage.local.set(updates, () => {
@@ -59,14 +61,19 @@ btn.addEventListener('click', () => {
         renderHistorial([]);
       }
 
-      chrome.tabs.query({}, (tabs) => {
+      chrome.tabs.query({ url: "*://*.mercadolibre.com.ar/*" }, (tabs) => {
         const tabCupones = tabs.find(t => t.url && t.url.includes('mercadolibre.com.ar/cupones'));
 
         if (nuevoEstado) {
           if (tabCupones) {
-            chrome.tabs.update(tabCupones.id, { url: CUPONES_URL, active: true });
+            chrome.tabs.update(tabCupones.id, { url: CUPONES_URL, active: true }, (tab) => {
+              const tId = tab?.id || tabCupones.id;
+              if (tId) chrome.storage.local.set({ targetTabId: tId });
+            });
           } else {
-            chrome.tabs.create({ url: CUPONES_URL });
+            chrome.tabs.create({ url: CUPONES_URL }, (tab) => {
+              if (tab?.id) chrome.storage.local.set({ targetTabId: tab.id });
+            });
           }
         } else if (tabCupones) {
           chrome.tabs.reload(tabCupones.id);
@@ -157,15 +164,12 @@ function ocultarBarra() {
 function renderHistorial(historial) {
   const lista = Array.isArray(historial) ? historial : [];
 
+  historyCount.textContent = String(lista.length);
+
   if (lista.length === 0) {
-    historyWrap.classList.remove('visible');
-    historyList.innerHTML = '';
-    historyCount.textContent = '0';
+    historyList.innerHTML = '<div class="history-empty">Los cupones detectados aparecerán aquí</div>';
     return;
   }
-
-  historyWrap.classList.add('visible');
-  historyCount.textContent = String(lista.length);
 
   historyList.innerHTML = lista
     .map((c) => {

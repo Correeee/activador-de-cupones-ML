@@ -1,6 +1,6 @@
 {
     "name": "activador-cupones-mercadolibre",
-    "version": "1.4.0",
+    "version": "1.6.0",
     "description": "Extensión de Chrome que aplica cupones de Mercado Libre automáticamente.",
     "private": true,
     "scripts": {

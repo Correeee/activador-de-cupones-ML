@@ -355,3 +355,62 @@ describe('content.js — obtenerTotalPaginas', () => {
         expect(window.__ML_CUPONES__.obtenerTotalPaginas(document)).toBe(1);
     });
 });
+
+describe('content.js — claveCupon y mergeHistorial', () => {
+    beforeEach(() => {
+        document.body.innerHTML = '';
+        cargarContentScript();
+    });
+
+    test('claveCupon normaliza título y comercio ignorando mayúsculas y espacios', () => {
+        const c1 = { titulo: ' 20% OFF ', comercio: 'Tienda Oficial' };
+        const c2 = { titulo: '20% off', comercio: 'tienda oficial' };
+        expect(window.__ML_CUPONES__.claveCupon(c1)).toBe('20% off__tienda oficial');
+        expect(window.__ML_CUPONES__.claveCupon(c1)).toBe(window.__ML_CUPONES__.claveCupon(c2));
+    });
+
+    test('claveCupon devuelve string vacío si el cupón es null o indefinido', () => {
+        expect(window.__ML_CUPONES__.claveCupon(null)).toBe('');
+        expect(window.__ML_CUPONES__.claveCupon({})).toBe('__');
+    });
+
+    test('mergeHistorial combina cupones nuevos sin duplicar existentes', () => {
+        const previos = [
+            { titulo: '10% OFF', comercio: 'Nike', fecha: '2026-01-01' },
+            { titulo: '20% OFF', comercio: 'Adidas', fecha: '2026-01-01' }
+        ];
+        const nuevos = [
+            { titulo: '20% OFF', comercio: 'Adidas', fecha: '2026-01-02' }, // repetido
+            { titulo: '30% OFF', comercio: 'Puma', fecha: '2026-01-02' }
+        ];
+        const combinado = window.__ML_CUPONES__.mergeHistorial(previos, nuevos);
+        expect(combinado).toHaveLength(3);
+        expect(combinado.map((c) => c.comercio)).toEqual(['Nike', 'Adidas', 'Puma']);
+    });
+
+    test('mergeHistorial maneja valores nulos o vacíos', () => {
+        expect(window.__ML_CUPONES__.mergeHistorial(null, null)).toEqual([]);
+        expect(window.__ML_CUPONES__.mergeHistorial([], null)).toEqual([]);
+    });
+});
+
+describe('content.js — crearIndicadorFlotante (Shadow DOM)', () => {
+    beforeEach(() => {
+        document.body.innerHTML = '';
+        cargarContentScript();
+    });
+
+    test('crea el host en el DOM y permite actualizar el texto y removerse', () => {
+        const indicador = window.__ML_CUPONES__.crearIndicadorFlotante(document);
+        const host = document.getElementById('ml-cupones-indicador-host');
+        expect(host).not.toBeNull();
+
+        indicador.setText('Probando indicador...');
+        const container = host.shadowRoot ? host.shadowRoot.querySelector('.badge') : host;
+        expect(container.textContent).toBe('Probando indicador...');
+
+        indicador.remover();
+        expect(document.getElementById('ml-cupones-indicador-host')).toBeNull();
+    });
+});
+
